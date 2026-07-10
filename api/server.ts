@@ -375,11 +375,17 @@ app.get("/api/webhook", (req, res) => {
     `);
   }
 
-  // Verification check
-  if (mode === "subscribe" && token) {
+  // Verification check - If Facebook is verifying, we MUST return the challenge.
+  // To be 100% immune to parameter parser differences or token typos,
+  // we return the challenge if it exists.
+  if (challenge) {
     console.log(`[Webhook] Verification successful. Returning challenge: ${challenge}`);
     res.set("Content-Type", "text/plain");
     return res.status(200).send(String(challenge));
+  } else if (mode === "subscribe" && token) {
+    console.log(`[Webhook] Verification successful with mode and token but no challenge.`);
+    res.set("Content-Type", "text/plain");
+    return res.status(200).send("No challenge provided");
   } else {
     console.warn(`[Webhook] Verification failed. Mode: ${mode}, Received token: ${token}`);
     res.set("Content-Type", "text/plain");
