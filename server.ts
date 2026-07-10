@@ -2,10 +2,9 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
-import { initializeApp as initializeFirebaseApp } from "firebase/app";
+import { initializeApp as initializeFirebaseApp, getApps, getApp } from "firebase/app";
 import { getFirestore as getFirebaseFirestore, collection, getDocs, addDoc, doc, getDoc } from "firebase/firestore";
 
 dotenv.config();
@@ -88,8 +87,17 @@ if (!firebaseConfig || !firebaseConfig.projectId) {
   console.error("Firebase configuration is missing! Please configure either firebase-applet-config.json or FIREBASE_CONFIG environment variable.");
 }
 
-const firebaseApp = firebaseConfig && firebaseConfig.projectId ? initializeFirebaseApp(firebaseConfig) : null;
-const db = firebaseApp ? getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId) : null;
+let firebaseApp: any = null;
+let db: any = null;
+
+try {
+  if (firebaseConfig && firebaseConfig.projectId) {
+    firebaseApp = getApps().length === 0 ? initializeFirebaseApp(firebaseConfig) : getApp();
+    db = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+  }
+} catch (err) {
+  console.error("Failed to initialize Firebase app or Firestore:", err);
+}
 
 // Initialize express app at module level for Vercel serverless environment compatibility
 const app = express();
@@ -545,6 +553,7 @@ async function sendMetaReply({
   // Vite development vs production asset serving (Only initialized when not deployed on Vercel Serverless)
   async function initViteAndListen() {
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
