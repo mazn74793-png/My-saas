@@ -306,13 +306,65 @@ app.post("/api/generate-reply", async (req, res) => {
 
 // Webhook Route: Verification (GET)
 app.get("/api/webhook", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
+  // 1. Direct searchParams parsing (safest & bypasses any query parser settings)
+  let mode = "";
+  let token = "";
+  let challenge = "";
+
+  try {
+    const parsedUrl = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
+    mode = parsedUrl.searchParams.get("hub.mode") || "";
+    token = parsedUrl.searchParams.get("hub.verify_token") || "";
+    challenge = parsedUrl.searchParams.get("hub.challenge") || "";
+  } catch (e) {
+    console.warn("[Webhook Verification] Native URL parsing failed:", e);
+  }
+
+  // 2. Fallbacks to req.query flat properties
+  if (!mode && req.query["hub.mode"]) mode = String(req.query["hub.mode"]);
+  if (!token && req.query["hub.verify_token"]) token = String(req.query["hub.verify_token"]);
+  if (!challenge && req.query["hub.challenge"]) challenge = String(req.query["hub.challenge"]);
+
+  // 3. Fallbacks to req.query nested object properties (in case 'qs' parsed them as hub: { mode, ... })
+  if (!mode && req.query.hub && typeof req.query.hub === "object") {
+    const hub = req.query.hub as any;
+    if (hub.mode) mode = String(hub.mode);
+    if (hub.verify_token) token = String(hub.verify_token);
+    if (hub.challenge) challenge = String(hub.challenge);
+  }
 
   console.log(`[Webhook Verification] mode: ${mode}, token: ${token}, challenge: ${challenge}`);
 
-  // To be absolutely foolproof for the user, if it's a subscribe request and any token is provided, we succeed and return challenge
+  // If the user is just opening the link in their browser (no mode/parameters specified),
+  // show a friendly success page to confirm the webhook is online and ready
+  if (!mode && !token && !challenge) {
+    return res.status(200).send(`
+      <div style="font-family: system-ui, -apple-system, sans-serif; text-align: center; padding: 50px 20px; background: #0f172a; color: #f8fafc; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; margin: 0; box-sizing: border-box;">
+        <div style="background: #1e293b; padding: 40px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); border: 1px solid #334155; max-width: 550px; width: 100%; box-sizing: border-box;">
+          <div style="font-size: 50px; margin-bottom: 15px;">🚀</div>
+          <h1 style="color: #10b981; margin: 0 0 15px 0; font-size: 26px; font-weight: 700;">Mizoo SaaS Webhook Is Active!</h1>
+          <p style="color: #94a3b8; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; direction: rtl;">
+            بوابة الويب‌هوك تعمل بنجاح وبأعلى كفاءة وجاهزة للربط الفوري مع لوحة تحكم مطوري فيسبوك (Meta Developer Portal).
+          </p>
+          <div style="text-align: left; background: #0f172a; padding: 20px; border-radius: 10px; margin-bottom: 25px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 13px; border: 1px solid #1e293b;">
+            <div style="margin-bottom: 10px;">
+              <span style="color: #38bdf8; font-weight: bold; display: block; margin-bottom: 4px;">Callback URL:</span>
+              <span style="color: #cbd5e1; word-break: break-all;">https://${req.headers.host || "my-saas-seven-roan.vercel.app"}/api/webhook</span>
+            </div>
+            <div>
+              <span style="color: #38bdf8; font-weight: bold; display: block; margin-bottom: 4px;">Verify Token:</span>
+              <span style="color: #f43f5e; font-weight: bold;">MizooSaaS2026_SecureToken</span>
+            </div>
+          </div>
+          <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 0; direction: rtl;">
+            قم بنسخ هذه البيانات ولصقها في إعدادات Webhook الخاص بـ Messenger أو Instagram بداخل حساب المطورين لتبدأ المحادثات بالعمل فوراً.
+          </p>
+        </div>
+      </div>
+    `);
+  }
+
+  // Verification check
   if (mode === "subscribe" && token) {
     console.log("[Webhook] Verification successful");
     return res.status(200).send(challenge);
