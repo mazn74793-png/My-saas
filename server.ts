@@ -10,8 +10,35 @@ import { getFirestore as getFirebaseFirestore, collection, getDocs, addDoc, doc,
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Define __dirname and __filename dynamically to be compatible with both ESM and CJS bundling
+let myFilename = "";
+let myDirname = "";
+
+try {
+  // @ts-ignore
+  if (typeof __filename !== "undefined") {
+    // @ts-ignore
+    myFilename = __filename;
+  }
+  // @ts-ignore
+  if (typeof __dirname !== "undefined") {
+    // @ts-ignore
+    myDirname = __dirname;
+  }
+} catch (e) {}
+
+if (!myFilename || !myDirname) {
+  try {
+    const metaUrl = new Function("return import.meta.url")();
+    if (metaUrl) {
+      myFilename = fileURLToPath(metaUrl);
+      myDirname = path.dirname(myFilename);
+    }
+  } catch (e) {
+    myDirname = process.cwd();
+    myFilename = path.join(myDirname, "server.ts");
+  }
+}
 
 // Load Firebase Config dynamically
 let firebaseConfig: any = null;
@@ -20,12 +47,12 @@ try {
   if (fs.existsSync(firebaseConfigPath)) {
     firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
   } else {
-    // Try relative to __dirname (which might be in dist/ or server/ or api/)
-    const fallbackPath = path.join(__dirname, "firebase-applet-config.json");
+    // Try relative to myDirname (which might be in dist/ or server/ or api/)
+    const fallbackPath = path.join(myDirname, "firebase-applet-config.json");
     if (fs.existsSync(fallbackPath)) {
       firebaseConfig = JSON.parse(fs.readFileSync(fallbackPath, "utf8"));
     } else {
-      const parentFallback = path.join(__dirname, "..", "firebase-applet-config.json");
+      const parentFallback = path.join(myDirname, "..", "firebase-applet-config.json");
       if (fs.existsSync(parentFallback)) {
         firebaseConfig = JSON.parse(fs.readFileSync(parentFallback, "utf8"));
       }
@@ -292,12 +319,18 @@ async function sendMetaReply({
 
     const verifyToken = process.env.VERIFY_TOKEN || "my_meta_webhook_verify_token";
 
-    if (mode === "subscribe" && token === verifyToken) {
+    // Support standard VERIFY_TOKEN, the user's specific token "MizooSaaS2026_SecureToken", and default fallback
+    const isTokenValid = 
+      token === verifyToken || 
+      token === "MizooSaaS2026_SecureToken" || 
+      token === "my_meta_webhook_verify_token";
+
+    if (mode === "subscribe" && isTokenValid) {
       console.log("[Webhook] Verification successful");
       return res.status(200).send(challenge);
     } else {
-      console.warn("[Webhook] Verification failed: token mismatch or incorrect mode");
-      return res.sendStatus(403);
+      console.warn(`[Webhook] Verification failed. Mode: ${mode}, Expected: ${verifyToken} or MizooSaaS2026_SecureToken, Received: ${token}`);
+      return res.status(403).send("Verification token mismatch");
     }
   });
 
