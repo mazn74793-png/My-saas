@@ -306,18 +306,24 @@ app.post("/api/generate-reply", async (req, res) => {
 
 // Webhook Route: Verification (GET)
 app.get("/api/webhook", (req, res) => {
-  // 1. Direct searchParams parsing (safest & bypasses any query parser settings)
   let mode = "";
   let token = "";
   let challenge = "";
 
-  try {
-    const parsedUrl = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
-    mode = parsedUrl.searchParams.get("hub.mode") || "";
-    token = parsedUrl.searchParams.get("hub.verify_token") || "";
-    challenge = parsedUrl.searchParams.get("hub.challenge") || "";
-  } catch (e) {
-    console.warn("[Webhook Verification] Native URL parsing failed:", e);
+  // 1. Manually extract query string from req.originalUrl, req.url, and custom headers
+  // This is the absolute safest way on Vercel/Express as it preserves raw query parameters
+  const rawUrls = [req.originalUrl, req.url];
+  for (const urlStr of rawUrls) {
+    if (!urlStr || typeof urlStr !== "string") continue;
+    const questionMarkIndex = urlStr.indexOf("?");
+    if (questionMarkIndex !== -1) {
+      const queryString = urlStr.substring(questionMarkIndex + 1);
+      const params = new URLSearchParams(queryString);
+      
+      if (!mode) mode = params.get("hub.mode") || params.get("mode") || "";
+      if (!token) token = params.get("hub.verify_token") || params.get("verify_token") || "";
+      if (!challenge) challenge = params.get("hub.challenge") || params.get("challenge") || "";
+    }
   }
 
   // 2. Fallbacks to req.query flat properties
@@ -332,6 +338,11 @@ app.get("/api/webhook", (req, res) => {
     if (hub.verify_token) token = String(hub.verify_token);
     if (hub.challenge) challenge = String(hub.challenge);
   }
+
+  // 4. Simple query parameter matching as last resort
+  if (!mode && req.query.mode) mode = String(req.query.mode);
+  if (!token && req.query.verify_token) token = String(req.query.verify_token);
+  if (!challenge && req.query.challenge) challenge = String(req.query.challenge);
 
   console.log(`[Webhook Verification] mode: ${mode}, token: ${token}, challenge: ${challenge}`);
 
@@ -366,10 +377,12 @@ app.get("/api/webhook", (req, res) => {
 
   // Verification check
   if (mode === "subscribe" && token) {
-    console.log("[Webhook] Verification successful");
-    return res.status(200).send(challenge);
+    console.log(`[Webhook] Verification successful. Returning challenge: ${challenge}`);
+    res.set("Content-Type", "text/plain");
+    return res.status(200).send(String(challenge));
   } else {
     console.warn(`[Webhook] Verification failed. Mode: ${mode}, Received token: ${token}`);
+    res.set("Content-Type", "text/plain");
     return res.status(403).send("Verification token mismatch or missing mode");
   }
 });
