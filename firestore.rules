@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // True if the user is authenticated
+    function isLoggedIn() {
+      return request.auth != null;
+    }
+
+    // True if the user's UID matches the document ID
+    function isOwner(userId) {
+      return isLoggedIn() && request.auth.uid == userId;
+    }
+
+    // Rules for the users collection
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Rules for the knowledgeBase collection
+    match /knowledgeBase/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Rules for the messages collection
+    match /messages/{messageId} {
+      // Allow write if the user sets their own UID as userId
+      allow create: if isLoggedIn() && request.resource.data.userId == request.auth.uid;
+      // Allow read/update/delete if the existing resource belongs to the user
+      allow read, update, delete: if isLoggedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Facebook & Instagram AI Automation",
+  "description": "A comprehensive SaaS platform to automatically respond to Facebook and Instagram comments and DMs using Firestore, Auth, and Gemini AI in clean Egyptian Arabic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

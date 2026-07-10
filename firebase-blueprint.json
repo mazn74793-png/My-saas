@@ -1,0 +1,122 @@
+{
+  "collections": [
+    {
+      "collectionName": "users",
+      "description": "Stores profile information for registered SaaS customers (store owners)",
+      "fields": [
+        {
+          "name": "uid",
+          "type": "string",
+          "description": "Firebase Auth UID"
+        },
+        {
+          "name": "email",
+          "type": "string",
+          "description": "Email address of the store owner"
+        },
+        {
+          "name": "displayName",
+          "type": "string",
+          "description": "Display name of the user"
+        },
+        {
+          "name": "connectedPages",
+          "type": "array",
+          "description": "List of connected social media page configuration objects (mocked tokens, page IDs, names, and active statuses)"
+        },
+        {
+          "name": "createdAt",
+          "type": "timestamp",
+          "description": "Account registration date"
+        }
+      ]
+    },
+    {
+      "collectionName": "knowledgeBase",
+      "description": "Stores shop specifics, items list, delivery, and conversational tone definitions",
+      "fields": [
+        {
+          "name": "userId",
+          "type": "string",
+          "description": "Foreign key reference to users.uid"
+        },
+        {
+          "name": "kbProducts",
+          "type": "string",
+          "description": "Freeform details about shop offerings, models, or variants"
+        },
+        {
+          "name": "kbPricing",
+          "type": "string",
+          "description": "Prices, packages, cash-on-delivery (COD) settings"
+        },
+        {
+          "name": "kbShipping",
+          "type": "string",
+          "description": "Courier costs, geographical delivery zones, and fulfillment windows"
+        },
+        {
+          "name": "dialect",
+          "type": "string",
+          "description": "Conversational Arabic accent setting (egyptian or standard)"
+        },
+        {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "description": "Last time the store owner edited their products/prices/shipping details"
+        }
+      ]
+    },
+    {
+      "collectionName": "messages",
+      "description": "Main history log for all AI auto-replies generated for comments and direct messages",
+      "fields": [
+        {
+          "name": "userId",
+          "type": "string",
+          "description": "UID of the store owner who owns this page integration"
+        },
+        {
+          "name": "customerName",
+          "type": "string",
+          "description": "User handle or display name of the social media user who commented or sent DM"
+        },
+        {
+          "name": "messageText",
+          "type": "string",
+          "description": "Raw trigger message or comment text from the end user"
+        },
+        {
+          "name": "commentReply",
+          "type": "string",
+          "description": "The comment reply text published (if triggerType is comment)"
+        },
+        {
+          "name": "dmReply",
+          "type": "string",
+          "description": "The private message (DM) text sent to the user"
+        },
+        {
+          "name": "platform",
+          "type": "string",
+          "description": "The source platform (facebook or instagram)"
+        },
+        {
+          "name": "triggerType",
+          "type": "string",
+          "description": "Whether triggered by a public post comment or direct message (comment or dm)"
+        },
+        {
+          "name": "status",
+          "type": "string",
+          "description": "The delivery outcome (sent or failed)"
+        },
+        {
+          "name": "timestamp",
+          "type": "timestamp",
+          "description": "Date and time the AI response was successfully synthesized and recorded"
+        }
+      ]
+    }
+  ]
+}
