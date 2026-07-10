@@ -10,10 +10,60 @@ import { getFirestore as getFirebaseFirestore, collection, getDocs, addDoc, doc,
 dotenv.config();
 
 // Load Firebase Config dynamically
-const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
-const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
-const firebaseApp = initializeFirebaseApp(firebaseConfig);
-const db = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+let firebaseConfig: any = null;
+try {
+  const firebaseConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(firebaseConfigPath)) {
+    firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, "utf8"));
+  } else {
+    // Try relative to __dirname (which might be in dist/ or server/ or api/)
+    const fallbackPath = path.join(__dirname, "firebase-applet-config.json");
+    if (fs.existsSync(fallbackPath)) {
+      firebaseConfig = JSON.parse(fs.readFileSync(fallbackPath, "utf8"));
+    } else {
+      const parentFallback = path.join(__dirname, "..", "firebase-applet-config.json");
+      if (fs.existsSync(parentFallback)) {
+        firebaseConfig = JSON.parse(fs.readFileSync(parentFallback, "utf8"));
+      }
+    }
+  }
+} catch (err) {
+  console.warn("Failed to read firebase-applet-config.json from file system:", err);
+}
+
+// Fallback to environment variable if file load failed
+if (!firebaseConfig && process.env.FIREBASE_CONFIG) {
+  try {
+    firebaseConfig = JSON.parse(process.env.FIREBASE_CONFIG);
+  } catch (err) {
+    console.error("Failed to parse FIREBASE_CONFIG environment variable:", err);
+  }
+}
+
+if (!firebaseConfig) {
+  // Try to build it from individual standard environment variables if they are set
+  firebaseConfig = {
+    projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "weighty-calculus-ddzcr",
+    appId: process.env.FIREBASE_APP_ID,
+    apiKey: process.env.FIREBASE_API_KEY,
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || `${process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "weighty-calculus-ddzcr"}.firebaseapp.com`,
+    firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-54f3127f-5287-4124-aa4c-11bccec6f73b",
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || "weighty-calculus-ddzcr"}.firebasestorage.app`,
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  };
+}
+
+if (!firebaseConfig || !firebaseConfig.projectId) {
+  console.error("Firebase configuration is missing! Please configure either firebase-applet-config.json or FIREBASE_CONFIG environment variable.");
+}
+
+const firebaseApp = firebaseConfig && firebaseConfig.projectId ? initializeFirebaseApp(firebaseConfig) : null;
+const db = firebaseApp ? getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId) : null;
+
+// Initialize express app at module level for Vercel serverless environment compatibility
+const app = express();
+app.use(express.json());
+
 
 // Core Helper: AI Response Generator using Gemini 2.5 Flash
 async function generateAIResponse({
@@ -182,13 +232,8 @@ async function sendMetaReply({
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
-
-  app.use(express.json());
-
-  // API Route: AI Response Generator (used by simulation playground)
+// Register all endpoints directly on the module-level app instance
+// API Route: AI Response Generator (used by simulation playground)
   app.post("/api/generate-reply", async (req, res) => {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
@@ -460,26 +505,33 @@ async function startServer() {
     }
   });
 
-  // Vite development vs production asset serving
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+  // Vite development vs production asset serving (Only initialized when not deployed on Vercel Serverless)
+  async function initViteAndListen() {
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+
+    const PORT = 3000;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://0.0.0.0:${PORT}`);
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-  });
-}
+  if (!process.env.VERCEL) {
+    initViteAndListen().catch((err) => {
+      console.error("Failed to initialize Vite or start listener:", err);
+    });
+  }
 
-startServer().catch((err) => {
-  console.error("Failed to start server:", err);
-});
+  // Export app default for Vercel Serverless compatibility
+  export default app;
