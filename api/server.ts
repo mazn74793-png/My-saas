@@ -91,6 +91,38 @@ try {
 const app = express();
 app.use(express.json());
 
+// Helper to call Gemini with robust exponential backoff retries for transient errors (e.g. 503, 429)
+async function generateContentWithRetry(ai: any, options: any, maxRetries = 4) {
+  let delay = 1000;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await ai.models.generateContent(options);
+    } catch (err: any) {
+      const errMsg = err.message || String(err);
+      const isTransient = 
+        err.status === "UNAVAILABLE" || 
+        err.code === 503 || 
+        err.status === "RESOURCE_EXHAUSTED" || 
+        err.code === 429 || 
+        errMsg.includes("503") || 
+        errMsg.includes("429") || 
+        errMsg.includes("temporary") || 
+        errMsg.includes("high demand") || 
+        errMsg.includes("UNAVAILABLE") ||
+        errMsg.includes("service is currently unavailable");
+
+      if (isTransient && attempt < maxRetries) {
+        console.warn(`[Gemini API] Attempt ${attempt}/${maxRetries} failed with transient error: ${errMsg}. Retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("Failed to generate response after multiple retries due to Gemini API temporary unavailability.");
+}
+
 // Core Helper: AI Response Generator using Gemini 3.5 Flash
 async function generateAIResponse({
   message,
@@ -116,7 +148,14 @@ async function generateAIResponse({
     throw new Error("GEMINI_API_KEY is not configured on the server. Please add it via the Settings menu.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ 
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
 
   const systemInstruction = `
 أنت لست برنامج ذكاء اصطناعي أو بوت أو نظام تلقائي بأي شكل من الأشكال. أنت موظف مبيعات وخدمة عملاء بشري حقيقي ومحترف اسمك "أحمد" وتعمل في قسم المبيعات لمتجر تجارة إلكترونية على منصات التواصل الاجتماعي (${platform === "facebook" ? "فيسبوك" : "إنستغرام"}).
@@ -160,8 +199,8 @@ ${kbShipping}
 
   const prompt = `العميل ${customerName} يقول: "${message}"`;
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3.5-flash",
+  const response = await generateContentWithRetry(ai, {
+    model: "gemini-2.5-flash",
     contents: prompt,
     config: {
       systemInstruction: systemInstruction,
@@ -187,7 +226,8 @@ async function sendMetaReply({
   recipientId,
   commentId,
   text,
-  isPrivateReply = false
+  isPrivateReply = false,
+  accessToken
 }: {
   platform: "facebook" | "instagram";
   triggerType: "comment" | "dm";
@@ -195,8 +235,9 @@ async function sendMetaReply({
   commentId?: string;
   text: string;
   isPrivateReply?: boolean;
+  accessToken?: string;
 }) {
-  const pageAccessToken = process.env.PAGE_ACCESS_TOKEN;
+  const pageAccessToken = accessToken || process.env.PAGE_ACCESS_TOKEN;
   if (!pageAccessToken || pageAccessToken.startsWith("my_") || pageAccessToken === "") {
     console.log(`[Meta API Mock] Page Access Token is missing or a placeholder. Skipping real API request.`);
     console.log(`[Meta API Mock] Platform: ${platform}, Trigger: ${triggerType}, Recipient: ${recipientId}, Text: "${text}"`);
@@ -414,7 +455,7 @@ app.post("/api/webhook", async (req, res) => {
           const userData = docSnap.data();
           const connectedPages = userData.connectedPages || [];
           const foundPage = connectedPages.find(
-            (p: any) => p.id === targetPageId && p.isConnected
+            (p: any) => (p.id === targetPageId || p.realId === targetPageId) && p.isConnected
           );
           if (foundPage) {
             matchedUser = { id: docSnap.id, ...userData };
@@ -423,12 +464,30 @@ app.post("/api/webhook", async (req, res) => {
           }
         }
 
+        // Safe Fallback: lookup by platform type if realId didn't match yet (vital for mock-to-real transitions)
+        if (!matchedUser) {
+          const webhookPlatform = body.object === "instagram" ? "instagram" : "facebook";
+          for (const docSnap of usersSnap.docs) {
+            const userData = docSnap.data();
+            const connectedPages = userData.connectedPages || [];
+            const foundPage = connectedPages.find(
+              (p: any) => p.platform === webhookPlatform && p.isConnected
+            );
+            if (foundPage) {
+              matchedUser = { id: docSnap.id, ...userData };
+              matchedPageConfig = foundPage;
+              break;
+            }
+          }
+        }
+
         if (!matchedUser) {
           console.warn(`[Webhook] No user found with active connected page ID: ${targetPageId}. Falling back to first available user.`);
           if (usersSnap.docs.length > 0) {
             const firstDoc = usersSnap.docs[0];
             matchedUser = { id: firstDoc.id, ...firstDoc.data() };
-            matchedPageConfig = matchedUser.connectedPages?.[0] || { id: targetPageId, platform: body.object === "instagram" ? "instagram" : "facebook" };
+            const webhookPlatform = body.object === "instagram" ? "instagram" : "facebook";
+            matchedPageConfig = matchedUser.connectedPages?.find((p: any) => p.platform === webhookPlatform) || matchedUser.connectedPages?.[0] || { id: targetPageId, platform: webhookPlatform };
           } else {
             console.error("[Webhook] No registered users in Firestore. Webhook aborted.");
             continue;
@@ -476,7 +535,8 @@ app.post("/api/webhook", async (req, res) => {
                 platform,
                 triggerType: "dm",
                 recipientId: senderId,
-                text: aiReply.dmReply
+                text: aiReply.dmReply,
+                accessToken: matchedPageConfig?.accessToken
               });
 
               await addDoc(collection(db, "messages"), {
@@ -542,7 +602,8 @@ app.post("/api/webhook", async (req, res) => {
                     triggerType: "comment",
                     recipientId: senderId,
                     commentId,
-                    text: aiReply.commentReply
+                    text: aiReply.commentReply,
+                    accessToken: matchedPageConfig?.accessToken
                   });
                   publicReplyStatus = pubRes.success;
                 }
@@ -555,7 +616,8 @@ app.post("/api/webhook", async (req, res) => {
                     recipientId: senderId,
                     commentId,
                     text: aiReply.dmReply,
-                    isPrivateReply: true
+                    isPrivateReply: true,
+                    accessToken: matchedPageConfig?.accessToken
                   });
                   privateReplyStatus = privRes.success;
                 }

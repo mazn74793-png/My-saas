@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { MessageLog } from "../types";
 import { 
   BarChart3, 
@@ -38,7 +38,13 @@ export default function AnalyticsTab({ userId }: AnalyticsTabProps) {
           where("userId", "==", userId),
           orderBy("timestamp", "desc")
         );
-        const querySnapshot = await getDocs(q);
+        let querySnapshot;
+        try {
+          querySnapshot = await getDocs(q);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.LIST, "messages");
+          return;
+        }
         const fetchedLogs: MessageLog[] = [];
         querySnapshot.forEach((doc) => {
           fetchedLogs.push({ id: doc.id, ...doc.data() } as MessageLog);

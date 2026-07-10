@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { KnowledgeBaseData } from "../types";
 import { 
   Save, 
@@ -34,7 +34,13 @@ export default function KnowledgeBaseTab({ userId }: KnowledgeBaseTabProps) {
     async function loadKB() {
       try {
         const kbDocRef = doc(db, "knowledgeBase", userId);
-        const kbDocSnap = await getDoc(kbDocRef);
+        let kbDocSnap;
+        try {
+          kbDocSnap = await getDoc(kbDocRef);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, `knowledgeBase/${userId}`);
+          return;
+        }
 
         if (kbDocSnap.exists()) {
           const data = kbDocSnap.data() as KnowledgeBaseData;
@@ -68,14 +74,19 @@ export default function KnowledgeBaseTab({ userId }: KnowledgeBaseTabProps) {
 
     try {
       const kbDocRef = doc(db, "knowledgeBase", userId);
-      await setDoc(kbDocRef, {
-        userId,
-        kbProducts: products,
-        kbPricing: pricing,
-        kbShipping: shipping,
-        dialect,
-        updatedAt: new Date()
-      });
+      try {
+        await setDoc(kbDocRef, {
+          userId,
+          kbProducts: products,
+          kbPricing: pricing,
+          kbShipping: shipping,
+          dialect,
+          updatedAt: new Date()
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `knowledgeBase/${userId}`);
+        return;
+      }
 
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 3000);

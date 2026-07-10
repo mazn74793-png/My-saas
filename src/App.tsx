@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db } from "./lib/firebase";
+import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { UserProfile, ConnectedPage } from "./types";
 import LandingPage from "./components/LandingPage";
 import AuthModal from "./components/AuthModal";
@@ -17,6 +17,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [initialSocialPlatform, setInitialSocialPlatform] = useState<'facebook' | 'instagram' | null>(null);
   
   // Dashboard navigation tab
   const [activeTab, setActiveTab] = useState("connect");
@@ -36,7 +37,13 @@ export default function App() {
         // Fetch/Sync profile from firestore
         try {
           const userDocRef = doc(db, "users", user.uid);
-          const docSnap = await getDoc(userDocRef);
+          let docSnap;
+          try {
+            docSnap = await getDoc(userDocRef);
+          } catch (error) {
+            handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+            return;
+          }
 
           if (docSnap.exists()) {
             setUserProfile(docSnap.data() as UserProfile);
@@ -64,7 +71,12 @@ export default function App() {
                 }
               ]
             };
-            await setDoc(userDocRef, profile);
+            try {
+              await setDoc(userDocRef, profile);
+            } catch (error) {
+              handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+              return;
+            }
             setUserProfile(profile);
           }
         } catch (error) {
@@ -82,7 +94,13 @@ export default function App() {
   const handleRefreshProfile = async () => {
     if (!currentUser) return;
     try {
-      const docSnap = await getDoc(doc(db, "users", currentUser.uid));
+      let docSnap;
+      try {
+        docSnap = await getDoc(doc(db, "users", currentUser.uid));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+        return;
+      }
       if (docSnap.exists()) {
         setUserProfile(docSnap.data() as UserProfile);
       }
@@ -150,10 +168,19 @@ export default function App() {
 
   // Render Landing Page if not logged in
   if (!currentUser) {
+    const handleStartFree = (platform: 'facebook' | 'instagram' | null = null) => {
+      setInitialSocialPlatform(platform);
+      setAuthModalOpen(true);
+    };
+
     return (
       <div dir="rtl">
-        <LandingPage onStartFree={() => setAuthModalOpen(true)} />
-        <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+        <LandingPage onStartFree={handleStartFree} />
+        <AuthModal 
+          isOpen={authModalOpen} 
+          onClose={() => setAuthModalOpen(false)} 
+          initialSocialPlatform={initialSocialPlatform}
+        />
       </div>
     );
   }

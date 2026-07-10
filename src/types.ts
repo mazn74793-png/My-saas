@@ -16,6 +16,8 @@ export interface ConnectedPage {
   username?: string;
   category?: string;
   avatarUrl?: string;
+  accessToken?: string;
+  realId?: string;
 }
 
 export interface KnowledgeBaseData {

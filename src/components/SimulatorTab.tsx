@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { doc, getDoc, collection, addDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { doc, getDoc, collection, addDoc, setDoc } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType } from "../lib/firebase";
 import { KnowledgeBaseData } from "../types";
 import { 
   Sparkles, 
@@ -58,7 +58,13 @@ export default function SimulatorTab({ userId, onNewMessage }: SimulatorTabProps
     try {
       // 1. Fetch current Knowledge Base from Firestore
       const kbDocRef = doc(db, "knowledgeBase", userId);
-      const kbDocSnap = await getDoc(kbDocRef);
+      let kbDocSnap;
+      try {
+        kbDocSnap = await getDoc(kbDocRef);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, `knowledgeBase/${userId}`);
+        return;
+      }
 
       let kbProducts = "";
       let kbPricing = "";
@@ -72,7 +78,25 @@ export default function SimulatorTab({ userId, onNewMessage }: SimulatorTabProps
         kbShipping = kbData.kbShipping || "";
         dialect = kbData.dialect || "egyptian";
       } else {
-        throw new Error("لم تقم بتهيئة قاعدة البيانات الخاصة بك بعد. يرجى ملء بيانات المتجر أولاً في تبويب 'قاعدة البيانات'!");
+        // Automatically initialize default knowledge base to prevent blocking the user
+        kbProducts = "اكتب هنا تفاصيل منتجاتك أو خدماتك (مثل: نبيع حقائب يد جلدية طبيعية متوفرة بـ 3 ألوان: أسود، بني، هافان).";
+        kbPricing = "اكتب هنا أسعارك وطرق الدفع (مثل: سعر الشنطة 450 جنيه، والدفع عند الاستلام).";
+        kbShipping = "اكتب هنا تفاصيل الشحن والتوصيل ومواعيد العمل (مثل: الشحن لجميع المحافظات خلال 3-5 أيام، سعر الشحن للقاهرة والجيزة 40 جنيه وباقي المحافظات 60 جنيه).";
+        dialect = "egyptian";
+
+        try {
+          await setDoc(kbDocRef, {
+            userId,
+            kbProducts,
+            kbPricing,
+            kbShipping,
+            dialect,
+            updatedAt: new Date()
+          });
+        } catch (setErr) {
+          console.warn("Failed to auto-initialize missing knowledgeBase in simulator:", setErr);
+          // Continue anyway using memory default values so the user is not blocked!
+        }
       }
 
       // 2. Call the server endpoint to generate responses via Gemini API
@@ -102,17 +126,22 @@ export default function SimulatorTab({ userId, onNewMessage }: SimulatorTabProps
       setSimulationResult(data);
 
       // 3. Save logs to firestore collection "messages"
-      await addDoc(collection(db, "messages"), {
-        userId,
-        customerName,
-        messageText,
-        commentReply: data.commentReply || "",
-        dmReply: data.dmReply || "",
-        platform,
-        triggerType,
-        status: "sent",
-        timestamp: new Date()
-      });
+      try {
+        await addDoc(collection(db, "messages"), {
+          userId,
+          customerName,
+          messageText,
+          commentReply: data.commentReply || "",
+          dmReply: data.dmReply || "",
+          platform,
+          triggerType,
+          status: "sent",
+          timestamp: new Date()
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, "messages");
+        return;
+      }
 
       // Refresh parent dashboard stats
       onNewMessage();
