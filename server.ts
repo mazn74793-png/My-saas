@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -8,6 +9,9 @@ import { initializeApp as initializeFirebaseApp } from "firebase/app";
 import { getFirestore as getFirebaseFirestore, collection, getDocs, addDoc, doc, getDoc } from "firebase/firestore";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load Firebase Config dynamically
 let firebaseConfig: any = null;
