@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { doc } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType, getDoc, setDoc } from "../lib/firebase";
 import { KnowledgeBaseData } from "../types";
 import { 
   Save, 

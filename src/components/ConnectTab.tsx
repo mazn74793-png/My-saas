@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { doc, updateDoc } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { doc } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType, updateDoc } from "../lib/firebase";
 import { ConnectedPage } from "../types";
 import { 
   Facebook, 

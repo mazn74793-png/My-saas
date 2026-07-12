@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { doc, getDoc, collection, addDoc, setDoc } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { doc, collection } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType, getDoc, setDoc, addDoc } from "../lib/firebase";
 import { KnowledgeBaseData } from "../types";
 import { 
   Sparkles, 

@@ -66,13 +66,13 @@ if (!firebaseConfig && process.env.FIREBASE_CONFIG) {
 if (!firebaseConfig || !firebaseConfig.apiKey) {
   console.log("[Firebase Config] Using hardcoded fallback credentials for Vercel deployment");
   firebaseConfig = {
-    projectId: "weighty-calculus-ddzcr",
-    appId: "1:675996307453:web:7cf74cb299daffba861394",
-    apiKey: "AIzaSyAYoZ1sfAsiS2T-vFDjzt_Yy94H4dRI2y4",
-    authDomain: "weighty-calculus-ddzcr.firebaseapp.com",
-    firestoreDatabaseId: "ai-studio-54f3127f-5287-4124-aa4c-11bccec6f73b",
-    storageBucket: "weighty-calculus-ddzcr.firebasestorage.app",
-    messagingSenderId: "675996307453"
+    projectId: "saas-d7c99",
+    appId: "1:684676917899:web:1b43564cc14238fb4e028e",
+    apiKey: "AIzaSyANgVlefPAe1Cm_DGVDKAidT7YL0i9InIQ",
+    authDomain: "saas-d7c99.firebaseapp.com",
+    firestoreDatabaseId: "(default)",
+    storageBucket: "saas-d7c99.firebasestorage.app",
+    messagingSenderId: "684676917899"
   };
 }
 
@@ -82,7 +82,11 @@ let db: any = null;
 try {
   if (firebaseConfig && firebaseConfig.projectId) {
     firebaseApp = getApps().length === 0 ? initializeFirebaseApp(firebaseConfig) : getApp();
-    db = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    if (firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)") {
+      db = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    } else {
+      db = getFirebaseFirestore(firebaseApp);
+    }
   }
 } catch (err) {
   console.error("Failed to initialize Firebase app or Firestore:", err);

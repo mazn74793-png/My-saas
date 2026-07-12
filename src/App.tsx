@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db, handleFirestoreError, OperationType } from "./lib/firebase";
+import { doc } from "firebase/firestore";
+import { auth, db, handleFirestoreError, OperationType, getDoc, setDoc } from "./lib/firebase";
 import { UserProfile, ConnectedPage } from "./types";
 import LandingPage from "./components/LandingPage";
 import AuthModal from "./components/AuthModal";

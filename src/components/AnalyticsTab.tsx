@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../lib/firebase";
+import { collection, query, where, orderBy } from "firebase/firestore";
+import { db, handleFirestoreError, OperationType, getDocs } from "../lib/firebase";
 import { MessageLog } from "../types";
 import { 
   BarChart3, 
